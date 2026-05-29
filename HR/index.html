@@ -2380,23 +2380,6 @@ textarea.fi{resize:vertical;min-height:80px}
   console.log('WorkSphere HR — Ready');
 })();
 </script>
-</body>
-</html>
-erySelectorAll('.tab').forEach(function(t){t.classList.remove('active');});
-        tab.classList.add('active');
-      });
-    });
-  });
-  document.querySelector('.nav-item').classList.add('active');
-
-  // Expose internals for GAS integration script
-  window._GID=GID; window._FMT=FMT; window._RG=RG;
-  window._addRow=addRow; window._clearFields=clearFields;
-  window._DEPT_BADGE=DEPT_BADGE; window._TYPE_BADGE=TYPE_BADGE; window._ROLE_BADGE=ROLE_BADGE;
-  window.CM=CM; window.OM=OM;
-  console.log('WorkSphere HR — Ready');
-})();
-</script>
 
 <!-- MODAL: Settings -->
 <div class="modal-overlay" id="M_SET">
@@ -2464,4 +2447,16 @@ async function testGasUrl() {
 }
 
 function saveSettings() {
-  var url = (document.getE
+  var url = (document.getElementById('set_gas').value||'').trim();
+  localStorage.setItem('ws_gas_url', url);
+  GAS_URL = url;
+  if(window._loadedModules) window._loadedModules = {};
+  if(window.CM) CM('M_SET');
+  if(window.T) T(url ? '✅ บันทึก GAS URL แล้ว — เชื่อมต่อ Sheets' : '⚠️ ล้าง GAS URL — Offline', url?'ok':'warn');
+  var bars = document.querySelectorAll('[data-gas-bar]');
+  bars.forEach(function(b){ b.remove(); });
+}
+</script>
+
+</body>
+</html>
