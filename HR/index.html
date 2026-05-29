@@ -2413,23 +2413,40 @@ function editEmp(btn) {
   var row = btn ? btn.closest('tr') : null;
   if (row) {
     var cells = row.querySelectorAll('td');
-    var nameEl  = cells[0] ? cells[0].querySelector('div div:last-child div:first-child') : null;
-    var emailEl = cells[0] ? cells[0].querySelector('div div:last-child div:last-child')  : null;
-    var deptEl  = cells[2] ? cells[2].querySelector('.badge') : null;
-    var posEl   = cells[3];
-    var slEl    = cells[5];
-    function sv(id, val){ var e=document.getElementById(id); if(e&&val!==undefined) e.value=val; }
-    if (nameEl) {
-      var parts = (nameEl.textContent||'').trim().split(' ');
-      sv('ee_fn', parts[0]||'');
-      sv('ee_ln', parts.slice(1).join(' ')||'');
+    function sv(id, val){ var e=document.getElementById(id); if(e && val !== undefined) e.value = val; }
+
+    // cells[0]: avatar-cell → [emp-avatar div][info div > [name div][email div]]
+    var ac = cells[0] ? cells[0].querySelector('.avatar-cell') : null;
+    if (ac) {
+      // ใช้ children โดยตรงเพื่อหลีกเลี่ยงการอ่าน nested text ผิด
+      var infoDivChildren = Array.from(ac.children);
+      // infoDivChildren[0] = .emp-avatar (initials), infoDivChildren[1] = info wrapper
+      var infoDiv = infoDivChildren[1];
+      if (infoDiv) {
+        var lines = Array.from(infoDiv.children);
+        var fullName = lines[0] ? lines[0].textContent.trim() : '';
+        var email    = lines[1] ? lines[1].textContent.trim() : '';
+        var parts    = fullName.split(' ');
+        sv('ee_fn', parts[0] || '');
+        sv('ee_ln', parts.slice(1).join(' ') || '');
+        sv('ee_em', email);
+      }
     }
-    if (emailEl) sv('ee_em', emailEl.textContent.trim());
-    if (deptEl)  sv('ee_dp', deptEl.textContent.trim());
-    if (posEl)   sv('ee_po', posEl.textContent.trim());
-    if (slEl)    sv('ee_sl', slEl.textContent.replace(/[฿,\s]/g,'').trim());
-    // store row ref for update
-    document.getElementById('M_EEMP')._editRow = row;
+    // cells[2]: dept badge
+    var deptBadge = cells[2] ? cells[2].querySelector('.badge') : null;
+    if (deptBadge) {
+      var dp = deptBadge.textContent.trim();
+      var dpSel = document.getElementById('ee_dp');
+      if (dpSel) dpSel.value = dp;
+    }
+    // cells[3]: position
+    if (cells[3]) sv('ee_po', cells[3].textContent.trim());
+    // cells[5]: salary — strip ฿ and commas
+    if (cells[5]) sv('ee_sl', cells[5].textContent.replace(/[฿,]/g,'').trim());
+
+    // store row ref for later GAS update
+    var modal = document.getElementById('M_EEMP');
+    if (modal) modal._editRow = row;
   }
   if (window.OM) OM('M_EEMP');
 }
