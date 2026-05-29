@@ -1276,7 +1276,7 @@ tr:hover td{background:rgba(124,58,237,.02)}
 // ===== GAS CONFIG =====
 // อ่านจาก localStorage (ตั้งค่าผ่านหน้า Settings ⚙️)
 // หรือ hardcode URL ตรงนี้ก็ได้ถ้าต้องการ deploy แบบ fixed
-var GAS_URL = localStorage.getItem('ws_gas_url') || '';
+var GAS_URL = localStorage.getItem('ws_gas_url') || 'https://script.google.com/macros/s/AKfycbzj7hJSRFJ0aUiGia8oXB-7VXcp-7Xk6xoYZO3F2PfklkpW3srAytI7olva1xXsJRQ8/exec';
 
 // ── api helper ──────────────────────────────────
 async function api(action, sheet, data, id, extra) {
