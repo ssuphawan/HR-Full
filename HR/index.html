@@ -1278,51 +1278,43 @@ tr:hover td{background:rgba(124,58,237,.02)}
 // หรือ hardcode URL ตรงนี้ก็ได้ถ้าต้องการ deploy แบบ fixed
 var GAS_URL = localStorage.getItem('ws_gas_url') || 'https://script.google.com/macros/s/AKfycbzj7hJSRFJ0aUiGia8oXB-7VXcp-7Xk6xoYZO3F2PfklkpW3srAytI7olva1xXsJRQ8/exec';
 
-// ── api helper ──────────────────────────────────
+// ── api helper (GET-only — แก้ CORS จาก Vercel) ──
 async function api(action, sheet, data, id, extra) {
   if (!GAS_URL) throw new Error('GAS_URL ยังไม่ได้ตั้งค่า');
-  if (action === 'read') {
-    var res = await fetch(
-      GAS_URL + '?action=read&sheet=' + encodeURIComponent(sheet),
-      { redirect: 'follow' }
-    );
-    return res.json();
-  }
-  var body = { action: action, sheet: sheet };
-  if (data)   body.data   = data;
-  if (id)     body.id     = id;
-  if (extra)  Object.assign(body, extra);
-  var res = await fetch(GAS_URL, {
-    method:   'POST',
-    body:     JSON.stringify(body),
-    headers:  { 'Content-Type': 'text/plain' },
-    redirect: 'follow'
+  var params = 'action=' + encodeURIComponent(action);
+  if (sheet)  params += '&sheet='   + encodeURIComponent(sheet);
+  if (id)     params += '&id='      + encodeURIComponent(id);
+  if (data)   params += '&payload=' + encodeURIComponent(JSON.stringify(data));
+  if (extra)  Object.keys(extra).forEach(function(k){
+    params += '&' + k + '=' + encodeURIComponent(extra[k]);
   });
+  var res = await fetch(GAS_URL + '?' + params, { redirect: 'follow' });
   return res.json();
 }
 
-// ── gasSave: ใช้ใน save functions ───────────────
+// ── gasSave: บันทึกลง GAS + แสดง error ชัดเจน ──
 async function gasSave(sheetKey, data, onOk, btn) {
   if (btn) { btn.disabled = true; btn._orig = btn.innerHTML; btn.innerHTML = '<span class="login-spinner"></span>'; }
   try {
     if (!GAS_URL) {
-      // Offline mode — generate ID locally
       data.ID        = data.ID        || (sheetKey.substring(0,3).toUpperCase() + '-' + Date.now().toString().slice(-6));
       data.CreatedAt = data.CreatedAt || new Date().toLocaleDateString('th-TH');
       onOk(data);
+      if (window.T) T('⚠️ Offline — ข้อมูลหายเมื่อ refresh (ตั้งค่า GAS URL)', 'warn');
     } else {
       var result = await api('insert', sheetKey, data);
-      if (result.ok) { onOk(result.row); }
-      else { if (window.T) T(result.error || 'บันทึกไม่สำเร็จ', 'err'); }
+      if (result.ok) {
+        onOk(result.row);
+        // ✅ บันทึกสำเร็จ
+      } else {
+        if (window.T) T('❌ GAS Error: ' + (result.error || 'บันทึกไม่สำเร็จ'), 'err', 6000);
+      }
     }
   } catch(e) {
-    if (window.T) T('เชื่อมต่อ GAS ไม่ได้ — บันทึกชั่วคราวแทน', 'warn');
-    // Fallback offline
-    data.ID        = data.ID        || (sheetKey.substring(0,3).toUpperCase() + '-' + Date.now().toString().slice(-6));
-    data.CreatedAt = data.CreatedAt || new Date().toLocaleDateString('th-TH');
-    onOk(data);
+    if (window.T) T('❌ ไม่สามารถเชื่อมต่อ GAS: ' + e.message, 'err', 6000);
+    console.error('gasSave error:', e);
   } finally {
-    if (btn) { btn.disabled = false; btn.innerHTML = btn._orig; }
+    if (btn) { btn.disabled = false; if(btn._orig) btn.innerHTML = btn._orig; }
   }
 }
 
@@ -1371,7 +1363,11 @@ async function loadModule(moduleId) {
   try {
     var cfg    = LOAD_MAP[moduleId];
     var result = await api('read', cfg.sheet);
-    if (!result.ok || !result.data || !result.data.length) return;
+    // ถ้า GAS ไม่มีข้อมูล ให้คงข้อมูลตัวอย่างในหน้าไว้ก่อน
+    if (!result.ok || !result.data || result.data.length === 0) {
+      _loadedModules[moduleId] = false; // allow retry later
+      return;
+    }
 
     if (cfg.special === 'announce') {
       var mod = document.getElementById('mod-announce');
@@ -1985,7 +1981,7 @@ textarea.fi{resize:vertical;min-height:80px}
       '<td><span class="badge '+db+'">'+dp+'</span></td><td>'+po+'</td>'+
       '<td>'+new Date().toLocaleDateString('th-TH')+'</td><td>฿'+FMT(sl)+'</td>'+
       '<td><span class="badge badge-green">● ทำงาน</span></td>'+
-      '<td><button class="btn btn-secondary btn-sm" onclick="OM(\'M_EEMP\')">✏️</button></td>'
+      '<td><button class="btn btn-secondary btn-sm" onclick="editEmp(this)">✏️</button></td>'
     );
     CM('M_EMP'); clearFields(['e_fn','e_ln','e_em','e_ph','e_dp','e_po','e_sd','e_sl']);
     T('เพิ่มพนักงาน "'+fn+' '+ln+'" เรียบร้อยแล้ว');
@@ -2412,6 +2408,32 @@ textarea.fi{resize:vertical;min-height:80px}
 
 <!-- GAS Settings JS -->
 <script>
+// ── editEmp: เปิด modal แก้ไขพนักงาน พร้อมข้อมูลจริง ──
+function editEmp(btn) {
+  var row = btn ? btn.closest('tr') : null;
+  if (row) {
+    var cells = row.querySelectorAll('td');
+    var nameEl  = cells[0] ? cells[0].querySelector('div div:last-child div:first-child') : null;
+    var emailEl = cells[0] ? cells[0].querySelector('div div:last-child div:last-child')  : null;
+    var deptEl  = cells[2] ? cells[2].querySelector('.badge') : null;
+    var posEl   = cells[3];
+    var slEl    = cells[5];
+    function sv(id, val){ var e=document.getElementById(id); if(e&&val!==undefined) e.value=val; }
+    if (nameEl) {
+      var parts = (nameEl.textContent||'').trim().split(' ');
+      sv('ee_fn', parts[0]||'');
+      sv('ee_ln', parts.slice(1).join(' ')||'');
+    }
+    if (emailEl) sv('ee_em', emailEl.textContent.trim());
+    if (deptEl)  sv('ee_dp', deptEl.textContent.trim());
+    if (posEl)   sv('ee_po', posEl.textContent.trim());
+    if (slEl)    sv('ee_sl', slEl.textContent.replace(/[฿,\s]/g,'').trim());
+    // store row ref for update
+    document.getElementById('M_EEMP')._editRow = row;
+  }
+  if (window.OM) OM('M_EEMP');
+}
+
 function openSettings() {
   var inp = document.getElementById('set_gas');
   var cur = document.getElementById('set_current_url');
